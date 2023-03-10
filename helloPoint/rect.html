@@ -3,7 +3,7 @@
  * @Author: 笙痞
  * @Date: 2023-02-27 22:40:12
  * @LastEditors: 笙痞77
- * @LastEditTime: 2023-03-06 18:08:50
+ * @LastEditTime: 2023-03-08 16:14:36
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -14,6 +14,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Document</title>
   <style>
+    body {
+      margin: 0;
+    }
+
     #webgl-container {
       width: 100vw;
       height: 100vh;
@@ -23,86 +27,50 @@
 
 <body>
   <canvas id="webgl-container"></canvas>
-  <!-- <script src="../utils/webgl-utils.js"></script>
-  <script src="../utils/webgl-debug.js"></script>
-  <script src="../utils/cuon-utils.js"></script> -->
   <script id="vertex-shader-2d" type="notjs">
-      // 属性变量，会从缓冲区获取数据
-      attribute vec4 a_position;
-      // 所有着色器都有一个main方法
+      attribute vec2 a_position;
+      uniform vec2 u_resolution;
       void main() {
-        // 顶点着色器的变量
-        gl_Position = a_position;
+        // 从像素坐标转换到 0.0 到 1.0
+        vec2 zeroToOne = a_position / u_resolution;
+        // 再把 0->1 转换 0->2
+        vec2 zeroToTwo = zeroToOne * 2.0;
+        // 把 0->2 转换到 -1->+1 (裁剪空间)
+        vec2 clipSpace = zeroToTwo - 1.0;
+        gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
       }
     </script>
   <script id="fragment-shader-2d" type="notjs">
       // 片段着色器需要设置精度
       // mediump是一个不错的默认值，代表“medium precision”（中等精度）
       precision mediump float;
+      uniform vec4 u_color;
       void main() {
         // gl_FragColor是一个片段着色器主要设置的变量
-        gl_FragColor = vec4(1, 0, 0.5, 1); // 返回“瑞迪施紫色”
+        gl_FragColor = u_color;
       }
   </script>
   <script src="https://webglfundamentals.org/webgl/resources/webgl-utils.js"></script>
   <script>
-    /**
-     * @description: 创建着色器
-     * @param {*} gl
-     * @param {*} type 着色器类型
-     * @param {*} sourc 数据源
-     * @return {*}
-     */
-    const createShader = (gl, type, source) => {
-      // 创建着色器对象
-      const shader = gl.createShader(type)
-      // 提供数据源
-      gl.shaderSource(shader, source)
-      // 编译生成着色器
-      gl.compileShader(shader)
-      const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
-      if (success) {
-        return shader;
-      }
-      console.log(gl.getShaderInfoLog(shader));
-      gl.deleteShader(shader)
-    }
-
-    // 将着色器连接到一个着色程序上
-    const createProgram = (gl, vertexShader, fragmentShader) => {
-      // 着色程序
-      const program = gl.createProgram();
-      gl.attachShader(program, vertexShader)
-      gl.attachShader(program, fragmentShader)
-      gl.linkProgram(program)
-      const success = gl.getProgramParameter(program, gl.LINK_STATUS)
-      if (success) {
-        return program
-      }
-      console.log(gl.getProgramInfoLog(program));
-      gl.deleteProgram(program);
-    }
-
     const init = () => {
       const canvas = document.querySelector("#webgl-container")
       const gl = canvas.getContext("webgl")
-      const vertexShaderSource = document.querySelector("#vertex-shader-2d").text;
-      const fragmentShaderSource = document.querySelector("#fragment-shader-2d").text;
-      // 创建着色器
-      const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource)
-      const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-      const program = createProgram(gl, vertexShader, fragmentShader)
+      const program = webglUtils.createProgramFromScripts(gl, ["vertex-shader-2d", "fragment-shader-2d"])
       // 从的GLSL着色程序中找到a_position所在的位置
       const posAttributeLocation = gl.getAttribLocation(program, "a_position")
+      const resolutionUniformLocation = gl.getUniformLocation(program, "u_resolution")
+      const colorUniformLocation = gl.getUniformLocation(program, "u_color")
       // 创建缓冲区
       const posBuffer = gl.createBuffer();
       // 绑定数据源到绑定点
       gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer)
-      // 三个二维点坐标
-      const positions = [
-        0, 0,
-        0, 0.5,
-        0.7, 0,
+      var positions = [
+        10, 20,
+        80, 20,
+        10, 30,
+        10, 30,
+        80, 20,
+        80, 30,
       ];
       // 通过绑定点向缓冲区中存放数据
       gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
@@ -125,10 +93,36 @@
       const stride = 0 // 0 = 移动单位数量 * 每个单位占用内存（sizeof(type)）, 每次迭代运行运动多少内存到下一个数据开始点
       const offset = 0 // 从缓冲起始位置开始读取
       gl.vertexAttribPointer(posAttributeLocation, size, type, normalize, stride, offset)
+      // 设置全局变量 分辨率
+      gl.uniform2f(resolutionUniformLocation, gl.canvas.width, gl.canvas.height)
 
-      const primitiveType = gl.TRIANGLES
-      // 顶点着色器将运行三次
-      gl.drawArrays(primitiveType, 0, 3)
+      for (let i = 0; i < 50; i++) {
+        setRectangle(gl, randomInt(300), randomInt(300), randomInt(300), randomInt(300))
+        gl.uniform4f(colorUniformLocation, Math.random(), Math.random(), Math.random(), 1)
+        const primitiveType = gl.TRIANGLES
+        // 顶点着色器将运行6次
+        gl.drawArrays(primitiveType, 0, 6)
+      }
+
+
+    }
+    //  Returns a random integer from 0 to range - 1.
+    function randomInt(range) {
+      return Math.floor(Math.random() * range);
+    }
+    function setRectangle(gl, x, y, width, height) {
+      var x1 = x;
+      var x2 = x + width;
+      var y1 = y;
+      var y2 = y + height;
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        x1, y1,
+        x2, y1,
+        x1, y2,
+        x1, y2,
+        x2, y1,
+        x2, y2,
+      ]), gl.STATIC_DRAW);
     }
     init()
   </script>

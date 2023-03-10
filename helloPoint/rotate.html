@@ -1,0 +1,219 @@
+<!--
+ * @Descripttion: 
+ * @Author: 笙痞
+ * @Date: 2023-02-27 22:40:12
+ * @LastEditors: 笙痞77
+ * @LastEditTime: 2023-03-08 15:54:53
+-->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Document</title>
+  <style>
+    @import url("https://webglfundamentals.org/webgl/resources/webgl-tutorials.css");
+
+    body {
+      margin: 0;
+    }
+
+    #webgl-container {
+      width: 100vw;
+      height: 100vh;
+    }
+
+    #ui {
+      width: 200px;
+    }
+  </style>
+</head>
+
+<body>
+  <canvas id="webgl-container"></canvas>
+  <div id="uiContainer">
+    <div id="ui">
+      <div id="x"></div>
+      <div id="y"></div>
+      <div id="rotation"></div>
+    </div>
+  </div>
+  <script id="vertex-shader-2d" type="notjs">
+      attribute vec2 a_position;
+      uniform vec2 u_resolution;
+      uniform vec2 u_translation; // 偏移量
+      uniform vec2 u_rotation;
+      void main() {
+        // 旋转位置
+        vec2 rotatedPosition = vec2(
+          a_position.x * u_rotation.y + a_position.y * u_rotation.x,
+          a_position.y * u_rotation.y - a_position.x * u_rotation.x
+        );
+        // 加上偏移量
+        vec2 position = rotatedPosition + u_translation;
+        vec2 zeroToOne = position / u_resolution;
+        vec2 zeroToTwo = zeroToOne * 2.0;
+        vec2 clipSpace = zeroToTwo - 1.0;
+        gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+      }
+    </script>
+  <script id="fragment-shader-2d" type="notjs">
+      // 片段着色器需要设置精度
+      // mediump是一个不错的默认值，代表“medium precision”（中等精度）
+      precision mediump float;
+      uniform vec4 u_color;
+      void main() {
+        // gl_FragColor是一个片段着色器主要设置的变量
+        gl_FragColor = u_color;
+      }
+  </script>
+  <script src="https://webglfundamentals.org/webgl/resources/jquery-1.7.1.min.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/jquery-ui-1.8.16.custom.min.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/jquery.mousecapture.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/jquery.gman.ui.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/jquery-gman-circle.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/webgl-utils.js"></script>
+  <script src="https://webglfundamentals.org/webgl/resources/webgl-lessons-ui.js"></script>
+  <script>
+
+    function init() {
+      var canvas = document.querySelector("#webgl-container")
+      var gl = canvas.getContext("webgl")
+      // setup GLSL program
+      var program = webglUtils.createProgramFromScripts(gl, ["vertex-shader-2d", "fragment-shader-2d"]);
+
+      // look up where the vertex data needs to go.
+      var positionLocation = gl.getAttribLocation(program, "a_position");
+
+      // lookup uniforms
+      var resolutionLocation = gl.getUniformLocation(program, "u_resolution");
+      var colorLocation = gl.getUniformLocation(program, "u_color");
+      var translationLocation = gl.getUniformLocation(program, "u_translation")
+      var rotationLocation = gl.getUniformLocation(program, "u_rotation")
+      // Create a buffer to put positions in
+      var positionBuffer = gl.createBuffer();
+
+      // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
+      gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+      // 将几何数据存到缓冲
+      setGeometry(gl)
+      var rotation = [0, 1]
+      var translation = [0, 0]
+      var width = 100
+      var height = 30
+      var color = [Math.random(), Math.random(), Math.random(), 1]
+
+      function drawF() {
+        webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+
+        // Tell WebGL how to convert from clip space to pixels
+        gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+        // Clear the canvas.
+        gl.clear(gl.COLOR_BUFFER_BIT);
+
+        // Tell it to use our program (pair of shaders)
+        gl.useProgram(program);
+        gl.enableVertexAttribArray(positionLocation)
+        gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer)
+        // setRectangle(gl, translation[0], translation[1], width, height);
+        // Tell the attribute how to get data out of positionBuffer (ARRAY_BUFFER)
+        var size = 2;          // 2 components per iteration
+        var type = gl.FLOAT;   // the data is 32bit floats
+        var normalize = false; // don't normalize the data
+        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+        var offset = 0;        // start at the beginning of the buffer
+        gl.vertexAttribPointer(
+          positionLocation, size, type, normalize, stride, offset);
+        // set the resolution
+        gl.uniform2f(resolutionLocation, gl.canvas.width, gl.canvas.height);
+        gl.uniform4fv(colorLocation, color)
+        // 设置平移
+        gl.uniform2fv(translationLocation, translation)
+        // 设置旋转
+        gl.uniform2fv(rotationLocation, rotation)
+        // Draw the rectangle.
+        var primitiveType = gl.TRIANGLES;
+        var offset = 0;
+        var count = 18;
+        gl.drawArrays(primitiveType, offset, count);
+      }
+      drawF()
+
+
+      webglLessonsUI.setupSlider("#x", {
+        slide: updatePosition(0),
+        max: gl.canvas.width,
+      })
+      webglLessonsUI.setupSlider("#y", { slide: updatePosition(1), max: gl.canvas.height });
+
+      $("#rotation").gmanUnitCircle({
+        width: 200,
+        height: 200,
+        value: 0,
+        slide: function (e, u) {
+          rotation[0] = u.x;
+          rotation[1] = u.y;
+          drawF();
+        }
+      });
+
+      function updatePosition(index) {
+        return function (event, ui) {
+          translation[index] = ui.value
+          drawF()
+        }
+      }
+    }
+
+
+    function setRectangle(gl, x, y, width, height) {
+      var x1 = x;
+      var x2 = x + width;
+      var y1 = y;
+      var y2 = y + height;
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        x1, y1,
+        x2, y1,
+        x1, y2,
+        x1, y2,
+        x2, y1,
+        x2, y2,
+      ]), gl.STATIC_DRAW);
+    }
+    init()
+
+    function setGeometry(gl) {
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        // 左竖
+        0, 0,
+        30, 0,
+        0, 150,
+        0, 150,
+        30, 0,
+        30, 150,
+
+        // 上横
+        30, 0,
+        100, 0,
+        30, 30,
+        30, 30,
+        100, 0,
+        100, 30,
+
+        // 中横
+        30, 60,
+        67, 60,
+        30, 90,
+        30, 90,
+        67, 60,
+        67, 90,
+      ]), gl.STATIC_DRAW)
+    }
+
+  </script>
+</body>
+
+</html>
